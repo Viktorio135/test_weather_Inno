@@ -11,10 +11,10 @@
    ```
 2.	Создайте файл .env, добавьте ключ OpenWeatherMap и SECRET_KEY
 3. Выполните миграции:
-    ```bash
+   ```bash
    python manage.py migrate
    ```
 4.	Запустите сервер:
-    ```bash
+   ```bash
    python manage.py runserver
    ```
