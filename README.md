@@ -1,6 +1,5 @@
 Для получения **реальных данных** о погоде используется внешний API:
-- **OpenWeatherMap** — [https://openweathermap.org/](https://openweathermap.org/)
-Для доступа к OpenWeatherMap необходим API-ключ, который указывается в файле `.env`
+- **open-meteo** — [https://open-meteo.com/](https://open-meteo.com/)
 
 
 ## Запуск проекта
@@ -9,7 +8,7 @@
    ```bash
    pip install -r requirements.txt
    ```
-2.	Создайте файл .env, добавьте ключ OpenWeatherMap и SECRET_KEY
+2.	Создайте файл .env, добавьте ключ SECRET_KEY
 3. Выполните миграции:
    ```bash
    python manage.py migrate
