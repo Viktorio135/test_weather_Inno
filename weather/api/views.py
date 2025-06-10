@@ -35,11 +35,25 @@ class CurrentWeatherView(APIView):
 
         elif status_code == status.HTTP_404_NOT_FOUND:
             raise NotFound(detail='Город не найден')
-
-        else:
+        elif status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
             raise APIException(
                 detail='Ошибка соединения с сервисом погоды.',
                 code=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        elif status_code == status.HTTP_504_GATEWAY_TIMEOUT:
+            raise APIException(
+                detail='Время ожидания истекло при обращении к сервису погоды.',
+                code=status.HTTP_504_GATEWAY_TIMEOUT
+            )
+        elif status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
+            raise APIException(
+                detail='Внутренняя ошибка сервиса погоды.',
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        else:
+            raise APIException(
+                detail='Неизвестная ошибка при получении погоды.',
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
@@ -67,11 +81,25 @@ class ForecastWeatherView(APIView):
 
         elif status_code == status.HTTP_404_NOT_FOUND:
             raise NotFound(detail='Город не найден')
-
-        else:
+        elif status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
             raise APIException(
                 detail='Ошибка соединения с сервисом погоды.',
                 code=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        elif status_code == status.HTTP_504_GATEWAY_TIMEOUT:
+            raise APIException(
+                detail='Время ожидания истекло при обращении к сервису погоды.',
+                code=status.HTTP_504_GATEWAY_TIMEOUT
+            )
+        elif status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
+            raise APIException(
+                detail='Внутренняя ошибка сервиса погоды.',
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        else:
+            raise APIException(
+                detail='Неизвестная ошибка при получении погоды.',
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     def post(self, request):

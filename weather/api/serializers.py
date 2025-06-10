@@ -34,11 +34,11 @@ class ForecastWeatherSerializer(serializers.Serializer):
         Проверка: ограничение по времени.
         """
         today = date.today()
-        max_date = today + timedelta(days=5)
+        max_date = today + timedelta(days=10)
         if value < today:
             raise serializers.ValidationError("Дата не может быть в прошлом.")
         if value > max_date:
-            raise serializers.ValidationError("Дата не может быть более чем через 5 дней.")
+            raise serializers.ValidationError("Дата не может быть более чем через 10 дней.")
         return value
 
 

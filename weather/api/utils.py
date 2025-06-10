@@ -1,82 +1,124 @@
 import requests
-
-
-from datetime import datetime, timedelta, timezone
-from django.conf import settings
+from datetime import datetime, timedelta
 
 
 def get_local_time(offset_seconds):
     """
-    Получает локальное время для города на основе смещения от UTC в секундах.
-    :param offset_seconds: Смещение в секундах от UTC.
-    :return: Строка с локальным временем в формате HH:MM.
+    Получение локального времени, с помощью разницы с GMT
     """
-    offset = timezone(timedelta(seconds=offset_seconds))
-    utc_time = datetime.now()
-    local_time = utc_time.replace(tzinfo=timezone.utc).astimezone(offset)
+    offset = timedelta(seconds=offset_seconds)
+    local_time = datetime.now() + offset
     return local_time.strftime('%H:%M')
 
 
-def get_date_weather(data, target_date):
+def get_geocoding(city):
     """
-    Извлекает минимальную и максимальную температуру из прогноза погоды на указанную дату.
-    :param data: JSON-ответ от API прогноза погоды (OpenWeather).
-    :param target_date: Целевая дата прогноза.
-    :return: Кортеж (min_temp, max_temp) или (None, None) если данных нет.
+    Получает геокоординаты для указанного города.
+    Использует Open-Meteo API.
     """
-    min_temp = float('inf')
-    max_temp = float('-inf')
+    geocoding_url = f"https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1&language=en&format=json"
+    try:
+        geo_response = requests.get(geocoding_url, timeout=5)
+        geo_response.raise_for_status()
+        geo_data = geo_response.json()
 
-    for entry in data['list']:
-        dt_txt = entry['dt_txt']
-        date_part = dt_txt.split()[0]
+        if 'results' not in geo_data or len(geo_data['results']) == 0:
+            return 404, None
 
-        if date_part == str(target_date):
-            temp_min = entry['main']['temp_min']
-            temp_max = entry['main']['temp_max']
-            min_temp = min(min_temp, temp_min)
-            max_temp = max(max_temp, temp_max)
+        result = geo_data['results'][0]
+        latitude = result['latitude']
+        longitude = result['longitude']
+        timezone_name = result.get('timezone', 'auto')
+        return 200, (latitude, longitude, timezone_name)
 
-    if min_temp != float('inf') and max_temp != float('-inf'):
-        return min_temp, max_temp
-    return None, None
+    except requests.exceptions.ConnectionError:
+        return 503, None
+    except requests.exceptions.Timeout:
+        return 504, None
+    except requests.exceptions.RequestException:
+        return 500, None
+
+
+def get_forecast_weather(city, date):
+    """
+    Получает прогноз погоды на указанную дату для указанного города.
+    Использует Open-Meteo API.
+    """
+    geo_status, geo_data = get_geocoding(city)
+    if geo_status != 200 or geo_data is None:
+        return geo_status, None
+
+    latitude, longitude, timezone_name = geo_data
+
+    forecast_url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={latitude}"
+        f"&longitude={longitude}"
+        f"&daily=temperature_2m_min,temperature_2m_max"
+        f"&forecast_days=10"
+        f"&timezone={timezone_name}"
+    )
+    try:
+        forecast_response = requests.get(forecast_url, timeout=5)
+        forecast_response.raise_for_status()
+        forecast_data = forecast_response.json()
+
+        dates = forecast_data['daily']['time']
+        min_temps = forecast_data['daily']['temperature_2m_min']
+        max_temps = forecast_data['daily']['temperature_2m_max']
+
+        for i, forecast_date in enumerate(dates):
+            if forecast_date == str(date):
+                return 200, {
+                    "min_temperature": min_temps[i],
+                    "max_temperature": max_temps[i]
+                }
+
+        return 404, None
+
+    except requests.exceptions.ConnectionError:
+        return 503, None
+    except requests.exceptions.Timeout:
+        return 504, None
+    except requests.exceptions.RequestException:
+        return 500, None
 
 
 def get_current_weather(city):
     """
     Получает текущую температуру и локальное время для указанного города.
-    :param city: Название города на английском языке.
-    :return: Кортеж (status_code, данные) или (status_code, None) при ошибке.
+    Использует Open-Meteo API.
     """
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={settings.WEATHER_API_KEY}&units=metric"
-    response = requests.get(url, timeout=5)
-    status_code = response.status_code
-    if status_code == 200:
-        data = response.json()
-        temperature = data["main"]["temp"]
-        local_time = get_local_time(data["timezone"])
-        return status_code, {
+    geo_status, geo_data = get_geocoding(city)
+    if geo_status != 200 or geo_data is None:
+        return geo_status, None
+
+    latitude, longitude, timezone_name = geo_data
+
+    weather_url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={latitude}"
+        f"&longitude={longitude}"
+        f"&current_weather=true"
+        f"&timezone={timezone_name}"
+    )
+    try:
+        weather_response = requests.get(weather_url, timeout=5)
+        weather_response.raise_for_status()
+        data = weather_response.json()
+
+        temperature = data["current_weather"]["temperature"]
+        offset_seconds = data.get("utc_offset_seconds", 0)
+        local_time = get_local_time(offset_seconds)
+
+        return 200, {
             "temperature": temperature,
             "local_time": local_time
         }
-    return status_code, None
 
-
-def get_forecast_weather(city, date):
-    """
-    Получает прогноз погоды (мин и макс температура) для указанного города на определённую дату.
-    :param city: Название города на английском языке.
-    :param date: Дата прогноза.
-    :return: Кортеж (status_code, данные) или (status_code, None) при ошибке.
-    """
-    url = f"http://api.openweathermap.org/data/2.5/forecast?q={city}&units=metric&appid={settings.WEATHER_API_KEY}"
-    response = requests.get(url, timeout=5)
-    status_code = response.status_code
-    if response.status_code == 200:
-        data = response.json()
-        min_temp, max_temp = get_date_weather(data, date)
-        return status_code, {
-            "min_temperature": min_temp,
-            "max_temperature": max_temp
-        }
-    return status_code, None
+    except requests.exceptions.ConnectionError:
+        return 503, None
+    except requests.exceptions.Timeout:
+        return 504, None
+    except requests.exceptions.RequestException:
+        return 500, None
