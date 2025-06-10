@@ -110,7 +110,11 @@ class OpenMeteoWeatherProvider(WeatherProvider):
             response.raise_for_status()
             data = response.json()
 
-            temperature = data["current_weather"]["temperature"]
+            current_weather = data.get("current_weather")
+            if not current_weather or "temperature" not in current_weather:
+                return 500, None
+            
+            temperature = current_weather["temperature"]
             offset_seconds = data.get("utc_offset_seconds", 0)
             local_time = self._get_local_time(offset_seconds)
 
@@ -158,9 +162,16 @@ class OpenMeteoWeatherProvider(WeatherProvider):
             response.raise_for_status()
             forecast_data = response.json()
 
-            dates = forecast_data['daily']['time']
-            min_temps = forecast_data['daily']['temperature_2m_min']
-            max_temps = forecast_data['daily']['temperature_2m_max']
+            daily_data = forecast_data.get("daily")
+            if not daily_data:
+                return 500, None
+
+            dates = daily_data.get('time', [])
+            min_temps = daily_data.get('temperature_2m_min', [])
+            max_temps = daily_data.get('temperature_2m_max', [])
+
+            if not (dates and min_temps and max_temps):
+                return 500, None
 
             for i, forecast_date in enumerate(dates):
                 if forecast_date == str(date):
