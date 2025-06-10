@@ -10,11 +10,18 @@ from .serializers import (
     ForecastCacheWeatherSerializer, CurrentWeatherResponseSerializer,
     ForecastWeatherResponseSerializer
 )
-from .utils import get_current_weather, get_forecast_weather
+from .services import WeatherService
+from .providers import OpenMeteoWeatherProvider
 from .repositories import CacheRepo
 
 
 class CurrentWeatherView(APIView):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.weather_service = WeatherService(
+            providers=[OpenMeteoWeatherProvider()]
+        )
+
     def get(self, request: Request) -> Response:
         """
         GET /api/weather/current:
@@ -39,38 +46,48 @@ class CurrentWeatherView(APIView):
 
         status_code: int
         weather_data: dict[str, Any]
-        status_code, weather_data = get_current_weather(city)
+        status_code, weather_data = self.weather_service.get_current_weather(city)
 
         if status_code == status.HTTP_200_OK:
             response_serializer = CurrentWeatherResponseSerializer(data=weather_data)
             response_serializer.is_valid(raise_exception=True)
             return Response(response_serializer.data)
 
-        elif status_code == status.HTTP_404_NOT_FOUND:
-            raise NotFound(detail='Город не найден')
-        elif status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
-            raise APIException(
-                detail='Ошибка соединения с сервисом погоды.',
-                code=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-        elif status_code == status.HTTP_504_GATEWAY_TIMEOUT:
-            raise APIException(
-                detail='Время ожидания истекло при обращении к сервису погоды.',
-                code=status.HTTP_504_GATEWAY_TIMEOUT
-            )
-        elif status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
-            raise APIException(
-                detail='Внутренняя ошибка сервиса погоды.',
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        else:
-            raise APIException(
-                detail='Неизвестная ошибка при получении погоды.',
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        self.handle_error(status_code)
+
+    def handle_error(self, status_code: int):
+        match status_code:
+            case status.HTTP_404_NOT_FOUND:
+                raise NotFound(detail='Город не найден')
+            case status.HTTP_503_SERVICE_UNAVAILABLE:
+                raise APIException(
+                    detail='Ошибка соединения с сервисом погоды.',
+                    code=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            case status.HTTP_504_GATEWAY_TIMEOUT:
+                raise APIException(
+                    detail='Время ожидания истекло при обращении к сервису погоды.',
+                    code=status.HTTP_504_GATEWAY_TIMEOUT
+                )
+            case status.HTTP_500_INTERNAL_SERVER_ERROR:
+                raise APIException(
+                    detail='Внутренняя ошибка сервиса погоды.',
+                    code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            case _:
+                raise APIException(
+                    detail='Неизвестная ошибка при получении погоды.',
+                    code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
 
 class ForecastWeatherView(APIView):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.weather_service = WeatherService(
+            providers=[OpenMeteoWeatherProvider()]
+        )
+
     def get(self, request: Request) -> Response:
         """
         GET /api/weather/forecast:
@@ -95,37 +112,29 @@ class ForecastWeatherView(APIView):
         city: str = params_serializer.validated_data['city']
         date: str = params_serializer.validated_data['date']
 
+        cache = CacheRepo().get(city=city, date={
+            "city": city,
+            "date": date
+        })
+
+        if cache:
+            return Response(
+                {
+                    "min_temperature": cache.min_temperature,
+                    "max_temperature": cache.max_temperature
+                }
+            )
+
         status_code: int
         weather_data: dict[str, Any]
-        status_code, weather_data = get_forecast_weather(city, date)
+        status_code, weather_data = self.weather_service.get_forecast_weather(city, date)
 
         if status_code == status.HTTP_200_OK:
             response_serializer = ForecastWeatherResponseSerializer(data=weather_data)
             response_serializer.is_valid(raise_exception=True)
             return Response(response_serializer.data)
 
-        elif status_code == status.HTTP_404_NOT_FOUND:
-            raise NotFound(detail='Город не найден')
-        elif status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
-            raise APIException(
-                detail='Ошибка соединения с сервисом погоды.',
-                code=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-        elif status_code == status.HTTP_504_GATEWAY_TIMEOUT:
-            raise APIException(
-                detail='Время ожидания истекло при обращении к сервису погоды.',
-                code=status.HTTP_504_GATEWAY_TIMEOUT
-            )
-        elif status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
-            raise APIException(
-                detail='Внутренняя ошибка сервиса погоды.',
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        else:
-            raise APIException(
-                detail='Неизвестная ошибка при получении погоды.',
-                code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        self.handle_error(status_code)
 
     def post(self, request: Request):
         """
@@ -166,3 +175,28 @@ class ForecastWeatherView(APIView):
         )
 
         return Response({'message': 'OK', 'created': created})
+
+    def handle_error(self, status_code: int):
+        match status_code:
+            case status.HTTP_404_NOT_FOUND:
+                raise NotFound(detail='Город не найден')
+            case status.HTTP_503_SERVICE_UNAVAILABLE:
+                raise APIException(
+                    detail='Ошибка соединения с сервисом погоды.',
+                    code=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            case status.HTTP_504_GATEWAY_TIMEOUT:
+                raise APIException(
+                    detail='Время ожидания истекло при обращении к сервису погоды.',
+                    code=status.HTTP_504_GATEWAY_TIMEOUT
+                )
+            case status.HTTP_500_INTERNAL_SERVER_ERROR:
+                raise APIException(
+                    detail='Внутренняя ошибка сервиса погоды.',
+                    code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            case _:
+                raise APIException(
+                    detail='Неизвестная ошибка при получении прогноза погоды.',
+                    code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
