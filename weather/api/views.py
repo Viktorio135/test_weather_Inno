@@ -1,9 +1,11 @@
 from typing import Any
+
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound, APIException
 from rest_framework.request import Request
+from drf_yasg.utils import swagger_auto_schema
 
 from .serializers import (
     CurrentWeatherSerializer, ForecastWeatherSerializer,
@@ -22,6 +24,17 @@ class CurrentWeatherView(APIView):
             providers=[OpenMeteoWeatherProvider()]
         )
 
+    @swagger_auto_schema(
+        operation_description="Возвращает текущую температуру и локальное время для указанного города.",
+        query_serializer=CurrentWeatherSerializer,
+        responses={
+            200: CurrentWeatherResponseSerializer,
+            404: "Город не найден",
+            503: "Ошибка соединения с сервисом погоды",
+            504: "Время ожидания истекло",
+            500: "Внутренняя ошибка сервиса погоды"
+        }
+    )
     def get(self, request: Request) -> Response:
         """
         GET /api/weather/current:
@@ -88,6 +101,17 @@ class ForecastWeatherView(APIView):
             providers=[OpenMeteoWeatherProvider()]
         )
 
+    @swagger_auto_schema(
+        operation_description="Возвращает прогноз температуры на заданную дату для указанного города.",
+        query_serializer=ForecastWeatherSerializer,
+        responses={
+            200: ForecastWeatherResponseSerializer,
+            404: "Город не найден",
+            503: "Ошибка соединения с сервисом погоды",
+            504: "Время ожидания истекло",
+            500: "Внутренняя ошибка сервиса погоды"
+        }
+    )
     def get(self, request: Request) -> Response:
         """
         GET /api/weather/forecast:
@@ -112,10 +136,7 @@ class ForecastWeatherView(APIView):
         city: str = params_serializer.validated_data['city']
         date: str = params_serializer.validated_data['date']
 
-        cache = CacheRepo().get(city=city, date={
-            "city": city,
-            "date": date
-        })
+        cache = CacheRepo().get(city=city, date=date)
 
         if cache:
             return Response(
