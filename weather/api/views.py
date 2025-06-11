@@ -13,7 +13,7 @@ from .serializers import (
     ForecastWeatherResponseSerializer
 )
 from .services import WeatherService
-from .providers import OpenMeteoWeatherProvider
+from .providers import OpenMeteoWeatherProvider, CacheWeatherProvider
 from .repositories import CacheRepo
 
 
@@ -98,7 +98,9 @@ class ForecastWeatherView(APIView):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.weather_service = WeatherService(
-            providers=[OpenMeteoWeatherProvider()]
+            providers=[
+                CacheWeatherProvider(), OpenMeteoWeatherProvider()
+            ]
         )
 
     @swagger_auto_schema(
@@ -135,16 +137,6 @@ class ForecastWeatherView(APIView):
 
         city: str = params_serializer.validated_data['city']
         date: str = params_serializer.validated_data['date']
-
-        cache = CacheRepo().get(city=city, date=date)
-
-        if cache:
-            return Response(
-                {
-                    "min_temperature": cache.min_temperature,
-                    "max_temperature": cache.max_temperature
-                }
-            )
 
         status_code: int
         weather_data: dict[str, Any]

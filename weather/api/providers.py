@@ -1,8 +1,10 @@
 import requests
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
+
+from .repositories import CacheRepo
 
 
 class WeatherProvider(ABC):
@@ -21,6 +23,45 @@ class WeatherProvider(ABC):
         Возвращает кортеж: (HTTP status code, данные или None)
         """
         pass
+
+
+class CacheWeatherProvider(WeatherProvider):
+    """
+    Кэширующий провайдер.
+    """
+
+    def get_current_weather(self, city: str) -> tuple[int, Optional[Dict[str, Any]]]:
+        """
+        Метод не реализован, так как данный провайдер кэширует только прогноз.
+        """
+        raise NotImplementedError("Метод get_current_weather не поддерживается в кэширующем провайдере")
+
+    def get_forecast_weather(self, city: str, date: str) -> Tuple[int, Optional[Dict[str, Any]]]:
+        """
+        Получает прогноз погоды (минимальная и максимальная температура) на указанную дату для указанного города.
+
+        Данные берутся из кэша, если они есть. Если данных в кэше нет, возвращает (404, None).
+
+        Args:
+            city (str): Название города.
+            date (str): Дата прогноза в формате 'YYYY-MM-DD'.
+
+        Returns:
+            tuple[int, Optional[Dict[str, Any]]]:
+                - 200: Данные найдены в кэше.
+                - 404: Данные отсутствуют в кэше.
+                - forecast_data (dict | None):
+                    - 'min_temperature': минимальная температура.
+                    - 'max_temperature': максимальная температура.
+        """
+        cache = CacheRepo().get(city=city, date=date)
+        if cache:
+            return 200, {
+                        "min_temperature": cache.min_temperature,
+                        "max_temperature": cache.max_temperature
+                    }
+
+        return 404, None
 
 
 class OpenMeteoWeatherProvider(WeatherProvider):
@@ -113,7 +154,7 @@ class OpenMeteoWeatherProvider(WeatherProvider):
             current_weather = data.get("current_weather")
             if not current_weather or "temperature" not in current_weather:
                 return 500, None
-            
+
             temperature = current_weather["temperature"]
             offset_seconds = data.get("utc_offset_seconds", 0)
             local_time = self._get_local_time(offset_seconds)
